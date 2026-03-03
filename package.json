@@ -1,0 +1,46 @@
+{
+  "name": "diary-search",
+  "version": "1.0.0",
+  "description": "OpenClaw 日记全文检索插件 - 为喜欢写日记的你，或因 memory-lancedb 插件替换后需要查找日记的场景",
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "search.js",
+    "tokenizer.js",
+    "synonyms.json",
+    "openclaw.plugin.json",
+    "SKILL.md",
+    "README.md"
+  ],
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "diary",
+    "search",
+    "full-text-search",
+    "bm25",
+    "chinese-tokenizer"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebrinass/diary-search.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sebrinass/diary-search/issues"
+  },
+  "homepage": "https://github.com/sebrinass/diary-search#readme",
+  "dependencies": {
+    "minisearch": "^7.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ]
+  }
+}

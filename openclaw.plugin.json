@@ -1,0 +1,67 @@
+{
+  "id": "diary-search",
+  "name": "Diary Search",
+  "description": "基于 MiniSearch 的日记全文检索插件，支持中文分词和时间衰减排序",
+  "kind": "extension",
+  "version": "1.0.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "description": "是否启用日记检索",
+        "default": true
+      },
+      "defaultWorkspace": {
+        "type": "string",
+        "description": "默认工作区路径（日记目录的父目录）",
+        "default": "~/.openclaw"
+      },
+      "diarySubdir": {
+        "type": "string",
+        "description": "日记子目录名",
+        "default": "memory"
+      },
+      "defaultLimit": {
+        "type": "number",
+        "description": "默认返回条数",
+        "default": 5
+      },
+      "timeDecayFactor": {
+        "type": "number",
+        "description": "时间衰减因子（越大衰减越快，0表示不衰减）",
+        "default": 0.1
+      },
+      "synonymsPath": {
+        "type": "string",
+        "description": "同义词字典路径（相对于插件目录）",
+        "default": "./synonyms.json"
+      }
+    }
+  },
+  "uiHints": {
+    "enabled": {
+      "label": "启用日记检索"
+    },
+    "defaultWorkspace": {
+      "label": "默认工作区",
+      "advanced": true
+    },
+    "diarySubdir": {
+      "label": "日记子目录",
+      "advanced": true
+    },
+    "defaultLimit": {
+      "label": "默认返回条数"
+    },
+    "timeDecayFactor": {
+      "label": "时间衰减因子",
+      "advanced": true
+    },
+    "synonymsPath": {
+      "label": "同义词字典",
+      "advanced": true
+    }
+  }
+}
