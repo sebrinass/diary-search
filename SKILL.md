@@ -9,7 +9,7 @@ metadata:
     install:
       - id: npm
         kind: node
-        package: "@openclaw/diary-search"
+        package: "diary-search"
         label: "Install via npm"
       - id: clawhub
         kind: clawhub
@@ -38,7 +38,7 @@ clawhub install diary-search
 ### 方式二：npm 安装
 
 ```bash
-npm install -g @openclaw/diary-search
+npm install -g diary-search
 ```
 
 安装后，在 `~/.openclaw/openclaw.json` 中添加插件路径：
@@ -49,7 +49,7 @@ npm install -g @openclaw/diary-search
     "enabled": true,
     "load": {
       "paths": [
-        "~/.npm-global/lib/node_modules/@openclaw/diary-search"
+        "~/.npm-global/lib/node_modules/diary-search"
       ]
     }
   }
