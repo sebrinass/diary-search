@@ -11,25 +11,15 @@
 - **时间过滤** - 支持今天、昨天、本周、本月等快捷过滤
 - **工作区隔离** - 多 agent 场景下的数据隔离
 
-## 一键安装
+## 安装
 
-### ClawHub（推荐）
+请使用 OpenClaw 的 diary-search skill 进行安装：
 
 ```bash
 clawhub install diary-search
 ```
 
-### npm
-
-```bash
-npm install -g @openclaw/diary-search
-```
-
-### 从 GitHub
-
-```bash
-git clone https://github.com/sebrinass/diary-search.git
-```
+或查看 [SKILL.md](./SKILL.md) 获取完整的安装方式。
 
 ## 使用方法
 
@@ -40,45 +30,6 @@ git clone https://github.com/sebrinass/diary-search.git
 搜索 2026-02 月关于"数据库优化"的讨论
 查找昨天提到的"bug"
 查看我的日记统计
-```
-
-## 可用工具
-
-### diary_search
-
-搜索日记内容。
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| query | string | ✅ | 搜索关键词，支持中英文混合 |
-| limit | number | ❌ | 返回条数，默认 5 |
-| time_filter | string | ❌ | 时间过滤器 |
-| workspace | string | ❌ | 工作区路径 |
-
-**time_filter 可选值：**
-- `today` / `yesterday` / `last_week` / `last_month` / `this_month`
-- `YYYY-MM`（如 2026-02）
-- `YYYY-MM-DD`（如 2026-02-28）
-
-### diary_stats
-
-获取日记统计信息。
-
-## 配置
-
-在 `~/.openclaw/openclaw.json` 中添加：
-
-```json
-{
-  "plugins": {
-    "enabled": true,
-    "load": {
-      "paths": [
-        "~/.npm-global/lib/node_modules/@openclaw/diary-search"
-      ]
-    }
-  }
-}
 ```
 
 ## 与 memory-lancedb 的关系
