@@ -59,7 +59,7 @@ npm install -g @openclaw/diary-search
 ### 方式三：从 GitHub 安装
 
 ```bash
-git clone https://github.com/你的用户名/diary-search.git
+git clone https://github.com/sebrinass/diary-search.git
 cd diary-search
 npm install
 ```

@@ -28,7 +28,7 @@ npm install -g @openclaw/diary-search
 ### 从 GitHub
 
 ```bash
-git clone https://github.com/你的用户名/diary-search.git
+git clone https://github.com/sebrinass/diary-search.git
 ```
 
 ## 使用方法
