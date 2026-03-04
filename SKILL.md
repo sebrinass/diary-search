@@ -21,6 +21,8 @@ metadata:
 
 日记全文检索插件，让你可以搜索 OpenClaw 记录的日记内容。
 
+**源代码**: [GitHub](https://github.com/sebrinass/diary-search) | **npm**: [diary-search](https://www.npmjs.com/package/diary-search)
+
 ## 安装步骤
 
 **第一步：安装插件**
