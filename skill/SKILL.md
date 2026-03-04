@@ -1,6 +1,6 @@
 ---
 name: diary-search
-description: "日记与会话检索插件，支持中文分词、BM25搜索、时间衰减排序。适用于喜欢写日记的 OpenClaw 用户，或需要查找历史对话的场景。"
+description: "检索日记与会话内容，支持中文分词、BM25搜索、时间衰减排序。用于搜索日记、查找历史对话、导出会话记录的场景。"
 metadata:
   openclaw:
     emoji: "📔"
