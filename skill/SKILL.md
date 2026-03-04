@@ -6,6 +6,20 @@ metadata:
     emoji: "📔"
     requires:
       bins: []
+      config:
+        - path: "~/.openclaw/openclaw.json"
+          access: "read"
+          purpose: "读取插件配置路径"
+      filesystem:
+        - path: "~/.openclaw/memory"
+          access: "read"
+          purpose: "读取日记文件"
+        - path: "~/.openclaw/agents/*/sessions"
+          access: "read"
+          purpose: "读取会话记录（含归档文件）"
+        - path: "~/.openclaw/cron"
+          access: "read"
+          purpose: "读取定时任务运行记录"
     install:
       - id: npm
         kind: node
@@ -19,7 +33,7 @@ metadata:
 
 # Diary Search
 
-日记与会话检索插件，让你可以搜索 OpenClaw 记录的日记内容和历史对话。
+日记与会话检索插件，搜索 OpenClaw 记录的日记内容和历史对话。
 
 **源代码**: [GitHub](https://github.com/sebrinass/diary-search) | **npm**: [diary-search](https://www.npmjs.com/package/diary-search)
 
@@ -170,13 +184,14 @@ openclaw gateway restart
 - 会话 ID（可直接跳转查看详情）
 - 执行摘要
 
-## v1.1.3 更新内容
+## 更新日志
 
-- ✨ 新增 `cron_list_runs` 工具，可查询定时任务运行记录
-- ✨ 会话搜索默认支持归档文件（`.deleted.xxx`）
-- ✨ 会话搜索默认时间范围改为 30 天
-- ✨ 自动过滤定时任务会话和心跳消息
-- 🐛 修复会话路径问题，使用 `stateDir` 配置
+### v1.1.3
+- 新增 `cron_list_runs` 工具，可查询定时任务运行记录
+- 会话搜索默认支持归档文件（`.deleted.xxx`）
+- 会话搜索默认时间范围改为 30 天
+- 自动过滤定时任务会话和心跳消息
+- 修复会话路径问题，使用 `stateDir` 配置
 
 ## 日记格式
 
