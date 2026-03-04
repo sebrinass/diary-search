@@ -54,6 +54,8 @@ export class SessionSearchEngine {
   parseSessionFile(filepath) {
     const messages = [];
     let sessionInfo = null;
+    let isCronSession = false;
+    let firstUserMessage = null;
     
     try {
       const content = readFileSync(filepath, 'utf-8');
@@ -76,6 +78,12 @@ export class SessionSearchEngine {
             if (msg.role === 'user' || msg.role === 'assistant') {
               const textContent = this.extractTextContent(msg.content);
               if (textContent.trim()) {
+                if (msg.role === 'user' && !firstUserMessage) {
+                  firstUserMessage = textContent;
+                  if (textContent.startsWith('[cron:')) {
+                    isCronSession = true;
+                  }
+                }
                 messages.push({
                   id: record.id,
                   sessionId: sessionInfo?.id || basename(filepath, '.jsonl'),
@@ -95,7 +103,7 @@ export class SessionSearchEngine {
       this.options.logger.warn?.(`解析会话文件失败: ${filepath}, ${err.message}`);
     }
     
-    return { messages, sessionInfo };
+    return { messages, sessionInfo, isCronSession };
   }
 
   loadSessionDirectory(sessionDir) {
@@ -109,8 +117,10 @@ export class SessionSearchEngine {
     let loadedCount = 0;
 
     for (const file of files) {
+      // 支持 .jsonl 和 .deleted.xxx.jsonl（归档文件）
       if (!file.endsWith('.jsonl')) continue;
-      if (file.includes('.deleted.') || file.includes('.bak-') || file.includes('.reset.')) continue;
+      // 排除备份和重置文件，但保留归档文件（.deleted.xxx）
+      if (file.includes('.bak-') || file.includes('.reset.')) continue;
 
       const filepath = join(sessionDir, file);
       
@@ -123,7 +133,7 @@ export class SessionSearchEngine {
           continue;
         }
 
-        const { messages, sessionInfo } = this.parseSessionFile(filepath);
+        const { messages, sessionInfo, isCronSession } = this.parseSessionFile(filepath);
         
         if (sessionInfo) {
           this.sessions.set(sessionInfo.id, {
@@ -131,7 +141,8 @@ export class SessionSearchEngine {
             filepath,
             messageCount: messages.length,
             firstMessageTime: messages.length > 0 ? messages[0].timestamp : null,
-            lastMessageTime: messages.length > 0 ? messages[messages.length - 1].timestamp : null
+            lastMessageTime: messages.length > 0 ? messages[messages.length - 1].timestamp : null,
+            isCronSession
           });
         }
         
@@ -215,8 +226,17 @@ export class SessionSearchEngine {
         monthAgo.setMonth(monthAgo.getMonth() - 1);
         return { start: monthAgo.getTime(), end: Date.now() };
       }
-      default:
+      default: {
+        // last_N_days 格式
+        const match = dateStr.match(/^last_(\d+)_days?$/);
+        if (match) {
+          const days = parseInt(match[1], 10);
+          const start = new Date(today);
+          start.setDate(start.getDate() - days);
+          return { start: start.getTime(), end: Date.now() };
+        }
         return null;
+      }
     }
   }
 
@@ -237,6 +257,9 @@ export class SessionSearchEngine {
 
     const results = [];
     for (const [sessionId, session] of this.sessions) {
+      // 过滤 cron 会话
+      if (session.isCronSession) continue;
+      
       const messagesInRange = messagesBySession.get(sessionId);
       if (messagesInRange) {
         results.push({
@@ -362,18 +385,6 @@ export class SessionSearchEngine {
           if (record.type === 'message' && record.message) {
             const msg = record.message;
             if (msg.role === 'user' || msg.role === 'assistant') {
-              const timestamp = this.parseTimestamp(record.timestamp) || this.parseTimestamp(msg.timestamp);
-              const date = new Date(timestamp);
-              const timeStr = date.toLocaleString('zh-CN', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit'
-              });
-              
-              const roleLabel = msg.role === 'user' ? '用户' : '小布';
-              
               // 提取文本内容
               const textParts = [];
               if (Array.isArray(msg.content)) {
@@ -389,7 +400,25 @@ export class SessionSearchEngine {
               }
               
               const text = textParts.join('\n');
+              
+              // 过滤心跳消息
+              if (msg.role === 'user' && text.startsWith('Read HEARTBEAT.md')) {
+                continue;
+              }
+              
               if (text.trim()) {
+                const timestamp = this.parseTimestamp(record.timestamp) || this.parseTimestamp(msg.timestamp);
+                const date = new Date(timestamp);
+                const timeStr = date.toLocaleString('zh-CN', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                });
+                
+                const roleLabel = msg.role === 'user' ? '用户' : '小布';
+                
                 lines.push({
                   time: timeStr,
                   role: roleLabel,

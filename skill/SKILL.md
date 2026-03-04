@@ -1,6 +1,6 @@
 ---
 name: diary-search
-description: "检索日记与会话内容，支持中文分词、BM25搜索、时间衰减排序。用于搜索日记、查找历史对话、导出会话记录的场景。"
+description: "检索日记与会话内容，支持中文分词、BM25搜索、时间衰减排序。可搜索日记、查找历史对话（含归档）、导出会话记录、查询定时任务运行记录。"
 metadata:
   openclaw:
     emoji: "📔"
@@ -80,6 +80,12 @@ openclaw gateway restart
 导出会话 77762d1f 的对话内容
 ```
 
+### 定时任务查询
+```
+查看最近 7 天的定时任务运行记录
+查看 xiaobu 的定时任务
+```
+
 ## 工具说明
 
 ### 日记工具
@@ -114,6 +120,8 @@ openclaw gateway restart
 | date | string | ✅ | 日期（today/yesterday/YYYY-MM-DD/YYYY-MM） |
 | agent | string | ❌ | Agent 名称，默认 xiaobu |
 
+**注意**：自动过滤定时任务会话，只显示正常对话。
+
 #### session_search
 
 搜索会话消息内容。
@@ -121,9 +129,14 @@ openclaw gateway restart
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | query | string | ✅ | 搜索关键词 |
-| date | string | ❌ | 日期过滤 |
+| date | string | ❌ | 日期过滤，默认最近 30 天 |
 | limit | number | ❌ | 返回条数，默认 5 |
 | agent | string | ❌ | Agent 名称，默认 xiaobu |
+
+**特性**：
+- 默认搜索最近 30 天的会话（包括已归档的会话）
+- 如需搜索更早内容，请指定 `date` 参数
+- 自动过滤心跳检查消息
 
 #### session_export
 
@@ -134,6 +147,36 @@ openclaw gateway restart
 | session_id | string | ✅ | 会话ID（可以是前缀） |
 | agent | string | ❌ | Agent 名称，默认 xiaobu |
 | include_thinking | boolean | ❌ | 是否包含 AI 思考过程，默认 false |
+
+**特性**：自动过滤心跳检查消息。
+
+### 定时任务工具
+
+#### cron_list_runs
+
+列出定时任务的运行记录。
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| days | number | ❌ | 查询最近多少天，默认 7 |
+| agent | string | ❌ | 过滤指定 agent 的定时任务 |
+
+**返回内容**：
+- 运行时间
+- 任务名称
+- 状态（ok/error）
+- 耗时
+- Agent 名称
+- 会话 ID（可直接跳转查看详情）
+- 执行摘要
+
+## v1.1.3 更新内容
+
+- ✨ 新增 `cron_list_runs` 工具，可查询定时任务运行记录
+- ✨ 会话搜索默认支持归档文件（`.deleted.xxx`）
+- ✨ 会话搜索默认时间范围改为 30 天
+- ✨ 自动过滤定时任务会话和心跳消息
+- 🐛 修复会话路径问题，使用 `stateDir` 配置
 
 ## 日记格式
 

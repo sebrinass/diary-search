@@ -10,6 +10,7 @@ import { join, dirname, normalize, resolve, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DiarySearchEngine } from './search.js';
 import { SessionSearchEngine } from './session.js';
+import { CronSearchEngine } from './cron.js';
 
 // 获取当前模块目录
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -93,6 +94,7 @@ const DEFAULT_CONFIG = {
   stateDir: '~/.openclaw',
   diarySubdir: 'memory',
   defaultLimit: 5,
+  defaultSessionDays: 30,
   timeDecayFactor: 0.1,
   synonymsPath: './synonyms.json'
 };
@@ -108,6 +110,12 @@ const engineCache = new Map();
  * @type {Map<string, SessionSearchEngine>}
  */
 const sessionEngineCache = new Map();
+
+/**
+ * 定时任务搜索引擎实例缓存
+ * @type {Map<string, CronSearchEngine>}
+ */
+const cronEngineCache = new Map();
 
 /**
  * 加载同义词字典
@@ -171,6 +179,29 @@ function getOrCreateSessionEngine(sessionDir, options) {
     options.logger.info?.(`会话搜索引擎初始化: ${sessionDir}, 加载 ${count} 条消息`);
     
     sessionEngineCache.set(sessionDir, engine);
+  }
+  
+  return engine;
+}
+
+/**
+ * 获取或创建定时任务搜索引擎实例
+ * @param {string} cronDir - 定时任务目录
+ * @param {Object} options - 配置选项
+ * @returns {CronSearchEngine} 定时任务搜索引擎实例
+ */
+function getOrCreateCronEngine(cronDir, options) {
+  let engine = cronEngineCache.get(cronDir);
+  
+  if (!engine) {
+    engine = new CronSearchEngine(cronDir, {
+      logger: options.logger
+    });
+    
+    engine.load();
+    options.logger.info?.(`定时任务搜索引擎初始化: ${cronDir}`);
+    
+    cronEngineCache.set(cronDir, engine);
   }
   
   return engine;
@@ -512,8 +543,9 @@ const diarySearchPlugin = {
         name: 'session_search',
         label: 'Session Search',
         description: 
-          '搜索会话消息内容。支持中文分词和时间过滤。' +
-          '返回匹配的消息片段，适用于查找具体对话内容。',
+          `搜索会话消息内容。支持中文分词和时间过滤。` +
+          `默认搜索最近 ${config.defaultSessionDays} 天的会话，如需搜索更早内容请指定 date 参数。` +
+          `返回匹配的消息片段，适用于查找具体对话内容。`,
         parameters: {
           type: 'object',
           properties: {
@@ -524,8 +556,9 @@ const diarySearchPlugin = {
             date: {
               type: 'string',
               description: 
-                '日期过滤（可选）。可选值: today, yesterday, last_week, last_month, ' +
-                '或具体日期格式 YYYY-MM-DD, YYYY-MM'
+                `日期过滤（可选）。默认最近 ${config.defaultSessionDays} 天。` +
+                `可选值: today, yesterday, last_week, last_month, 或具体日期格式 YYYY-MM-DD, YYYY-MM。` +
+                `如搜不到内容，可尝试扩大时间范围。`
             },
             limit: {
               type: 'number',
@@ -540,7 +573,7 @@ const diarySearchPlugin = {
         },
         
         async execute(_toolCallId, params) {
-          const { query, date = null, limit = config.defaultLimit, agent = 'xiaobu' } = params;
+          const { query, date = `last_${config.defaultSessionDays}_days`, limit = config.defaultLimit, agent = 'xiaobu' } = params;
           
           if (!query || query.trim().length === 0) {
             return {
@@ -713,6 +746,84 @@ const diarySearchPlugin = {
       { name: 'session_export' }
     );
 
+    // 注册 cron_list_runs 工具
+    api.registerTool(
+      {
+        name: 'cron_list_runs',
+        label: 'Cron List Runs',
+        description: 
+          '列出定时任务的运行记录。' +
+          '返回任务名称、运行时间、状态、摘要等信息，可用于查看定时任务执行情况。',
+        parameters: {
+          type: 'object',
+          properties: {
+            days: {
+              type: 'number',
+              description: '查询最近多少天的记录，默认 7 天'
+            },
+            agent: {
+              type: 'string',
+              description: '过滤指定 agent 的定时任务（可选）'
+            }
+          }
+        },
+        
+        async execute(_toolCallId, params) {
+          const { days = 7, agent = null } = params;
+          
+          const safeDays = Math.max(1, Math.min(365, Number(days) || 7));
+          
+          // 验证 agent 名称（如果提供了）
+          if (agent) {
+            const agentValidation = validateAgentName(agent);
+            if (!agentValidation.valid) {
+              return {
+                content: [{ type: 'text', text: `Agent 名称无效: ${agentValidation.error}` }],
+                details: { error: 'invalid_agent' }
+              };
+            }
+          }
+          
+          try {
+            const cronDir = join(api.resolvePath(config.stateDir || config.defaultWorkspace), 'cron');
+            
+            const engine = getOrCreateCronEngine(cronDir, {
+              logger: api.logger
+            });
+            
+            const results = engine.listRuns({ days: safeDays, agent });
+            
+            if (results.length === 0) {
+              return {
+                content: [{ type: 'text', text: `最近 ${safeDays} 天内没有定时任务运行记录。` }],
+                details: { days: safeDays, agent }
+              };
+            }
+            
+            // 格式化输出
+            const lines = results.map(r => {
+              const duration = r.duration ? `${r.duration}秒` : '-';
+              const summary = r.summary ? `\n    摘要: ${r.summary}` : '';
+              return `## ${r.time} | ${r.jobName}\n` +
+                     `    状态: ${r.status} | 耗时: ${duration} | Agent: ${r.agent}\n` +
+                     `    会话ID: ${r.sessionId}${summary}`;
+            });
+            
+            return {
+              content: [{ type: 'text', text: `找到 ${results.length} 条定时任务运行记录：\n\n${lines.join('\n\n')}` }],
+              details: { count: results.length, days: safeDays, agent }
+            };
+          } catch (err) {
+            return {
+              content: [{ type: 'text', text: `查询定时任务失败: ${err.message}` }],
+              details: { error: err.message }
+            };
+          }
+        }
+      },
+      { name: 'cron_list_runs' }
+    );
+
     // 注册后台服务（用于清理缓存等）
     api.registerService({
       id: 'diary-search',
@@ -723,6 +834,7 @@ const diarySearchPlugin = {
         // 清理缓存
         engineCache.clear();
         sessionEngineCache.clear();
+        cronEngineCache.clear();
         api.logger.info('diary-search: 服务停止，缓存已清理');
       }
     });
