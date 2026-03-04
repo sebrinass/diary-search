@@ -1,7 +1,7 @@
 {
   "name": "diary-search",
-  "version": "1.0.0",
-  "description": "OpenClaw 日记全文检索插件 - 为喜欢写日记的你，或因 memory-lancedb 插件替换后需要查找日记的场景",
+  "version": "1.1.0",
+  "description": "OpenClaw 日记与会话检索插件 - 为喜欢写日记的你，或需要查找历史对话的场景",
   "type": "module",
   "main": "index.js",
   "files": [
