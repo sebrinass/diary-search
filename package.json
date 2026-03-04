@@ -1,6 +1,6 @@
 {
   "name": "diary-search",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "OpenClaw 日记与会话检索插件 - 为喜欢写日记的你，或需要查找历史对话的场景",
   "type": "module",
   "main": "index.js",

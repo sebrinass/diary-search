@@ -90,8 +90,8 @@ function validateSessionId(sessionId) {
 const DEFAULT_CONFIG = {
   enabled: true,
   defaultWorkspace: '~/.openclaw',
+  stateDir: '~/.openclaw',
   diarySubdir: 'memory',
-  sessionSubdir: 'agents/xiaobu/sessions',
   defaultLimit: 5,
   timeDecayFactor: 0.1,
   synonymsPath: './synonyms.json'
@@ -456,8 +456,8 @@ const diarySearchPlugin = {
           }
           
           try {
-            const basePath = api.resolvePath(config.defaultWorkspace);
-            const sessionDir = join(basePath, 'agents', agent, 'sessions');
+            const stateDir = api.resolvePath(config.stateDir || config.defaultWorkspace);
+            const sessionDir = join(stateDir, 'agents', agent, 'sessions');
             
             const engine = getOrCreateSessionEngine(sessionDir, {
               timeDecayFactor: config.timeDecayFactor,
@@ -561,8 +561,8 @@ const diarySearchPlugin = {
           const safeLimit = Math.max(1, Math.min(100, Number(limit) || config.defaultLimit));
           
           try {
-            const basePath = api.resolvePath(config.defaultWorkspace);
-            const sessionDir = join(basePath, 'agents', agent, 'sessions');
+            const stateDir = api.resolvePath(config.stateDir || config.defaultWorkspace);
+            const sessionDir = join(stateDir, 'agents', agent, 'sessions');
             
             const engine = getOrCreateSessionEngine(sessionDir, {
               timeDecayFactor: config.timeDecayFactor,
@@ -675,8 +675,8 @@ const diarySearchPlugin = {
           }
           
           try {
-            const basePath = api.resolvePath(config.defaultWorkspace);
-            const sessionDir = join(basePath, 'agents', agent, 'sessions');
+            const stateDir = api.resolvePath(config.stateDir || config.defaultWorkspace);
+            const sessionDir = join(stateDir, 'agents', agent, 'sessions');
             
             const engine = getOrCreateSessionEngine(sessionDir, {
               timeDecayFactor: config.timeDecayFactor,

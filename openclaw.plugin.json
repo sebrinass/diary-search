@@ -3,7 +3,7 @@
   "name": "Diary Search",
   "description": "基于 MiniSearch 的日记全文检索插件，支持中文分词和时间衰减排序",
   "kind": "extension",
-  "version": "1.0.0",
+  "version": "1.1.2",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -16,6 +16,11 @@
       "defaultWorkspace": {
         "type": "string",
         "description": "默认工作区路径（日记目录的父目录）",
+        "default": "~/.openclaw"
+      },
+      "stateDir": {
+        "type": "string",
+        "description": "状态目录路径（会话数据所在目录）",
         "default": "~/.openclaw"
       },
       "diarySubdir": {
@@ -46,6 +51,10 @@
     },
     "defaultWorkspace": {
       "label": "默认工作区",
+      "advanced": true
+    },
+    "stateDir": {
+      "label": "状态目录",
       "advanced": true
     },
     "diarySubdir": {
