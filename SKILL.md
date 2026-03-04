@@ -1,6 +1,6 @@
 ---
 name: diary-search
-description: "日记全文检索插件，支持中文分词、BM25搜索、时间衰减排序。适用于喜欢写日记的 OpenClaw 用户，或因 memory-lancedb 插件替换后需要查找日记的场景。"
+description: "日记与会话检索插件，支持中文分词、BM25搜索、时间衰减排序。适用于喜欢写日记的 OpenClaw 用户，或需要查找历史对话的场景。"
 metadata:
   openclaw:
     emoji: "📔"
@@ -19,7 +19,7 @@ metadata:
 
 # Diary Search
 
-日记全文检索插件，让你可以搜索 OpenClaw 记录的日记内容。
+日记与会话检索插件，让你可以搜索 OpenClaw 记录的日记内容和历史对话。
 
 **源代码**: [GitHub](https://github.com/sebrinass/diary-search) | **npm**: [diary-search](https://www.npmjs.com/package/diary-search)
 
@@ -64,6 +64,7 @@ openclaw gateway restart
 
 安装完成后，直接对我说：
 
+### 日记搜索
 ```
 搜索我上周关于"项目架构"的日记
 搜索 2026-02 月关于"数据库优化"的讨论
@@ -71,9 +72,19 @@ openclaw gateway restart
 查看我的日记统计
 ```
 
+### 会话检索
+```
+列出昨天的会话
+列出 2026-03-03 的会话
+搜索我之前说的"webchat"
+导出会话 77762d1f 的对话内容
+```
+
 ## 工具说明
 
-### diary_search
+### 日记工具
+
+#### diary_search
 
 搜索日记内容。
 
@@ -88,9 +99,41 @@ openclaw gateway restart
 - `YYYY-MM`（如 2026-02）
 - `YYYY-MM-DD`（如 2026-02-28）
 
-### diary_stats
+#### diary_stats
 
 获取日记统计信息。
+
+### 会话工具
+
+#### session_list_by_date
+
+按日期列出会话文件。
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| date | string | ✅ | 日期（today/yesterday/YYYY-MM-DD/YYYY-MM） |
+| agent | string | ❌ | Agent 名称，默认 xiaobu |
+
+#### session_search
+
+搜索会话消息内容。
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| query | string | ✅ | 搜索关键词 |
+| date | string | ❌ | 日期过滤 |
+| limit | number | ❌ | 返回条数，默认 5 |
+| agent | string | ❌ | Agent 名称，默认 xiaobu |
+
+#### session_export
+
+导出会话的纯对话文本。
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| session_id | string | ✅ | 会话ID（可以是前缀） |
+| agent | string | ❌ | Agent 名称，默认 xiaobu |
+| include_thinking | boolean | ❌ | 是否包含 AI 思考过程，默认 false |
 
 ## 日记格式
 
