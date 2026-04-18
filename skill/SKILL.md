@@ -1,6 +1,6 @@
 ---
 name: diary-search
-description: "检索日记与会话内容，支持中文分词、BM25搜索、时间衰减排序。可搜索日记、查找历史对话（含归档）、导出会话记录、查询定时任务运行记录。"
+description: "检索日记与会话内容，支持中文分词、BM25搜索、时间衰减排序。可搜索日记、查找历史对话（含归档）、导出会话记录（自动过滤噪音，3天后自动清理）、查询定时任务运行记录。"
 metadata:
   openclaw:
     emoji: "📔"
@@ -14,6 +14,9 @@ metadata:
         - path: "~/.openclaw/memory"
           access: "read"
           purpose: "读取日记文件"
+        - path: "~/.openclaw/memory/exports"
+          access: "write"
+          purpose: "保存会话导出文件（自动过期清理）"
         - path: "~/.openclaw/agents/*/sessions"
           access: "read"
           purpose: "读取会话记录（含归档文件）"
@@ -154,7 +157,7 @@ openclaw gateway restart
 
 #### session_export
 
-导出会话的纯对话文本。
+导出会话的纯对话文本（自动过滤噪音，只保留时间+正文）。
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -162,7 +165,13 @@ openclaw gateway restart
 | agent | string | ❌ | Agent 名称，默认 xiaobu |
 | include_thinking | boolean | ❌ | 是否包含 AI 思考过程，默认 false |
 
-**特性**：自动过滤心跳检查消息。
+**特性**：
+- 自动过滤心跳检查消息
+- 自动剥离记忆注入块（`<relevant-memories>`）、系统元数据、工具输出等噪音
+- 导出文件保存至 `{工作区}/memory/exports/` 目录
+- 文件名格式：`YYYY-MM-DD-HHmmss-会话导出-标题.md`
+- 文件头部含 YAML 元数据（含过期时间，默认 3 天后自动清理）
+- 兼容 memory-lancedb-pro 和 OpenClaw 原版记忆插件
 
 ### 定时任务工具
 
@@ -183,15 +192,6 @@ openclaw gateway restart
 - Agent 名称
 - 会话 ID（可直接跳转查看详情）
 - 执行摘要
-
-## 更新日志
-
-### v1.1.3
-- 新增 `cron_list_runs` 工具，可查询定时任务运行记录
-- 会话搜索默认支持归档文件（`.deleted.xxx`）
-- 会话搜索默认时间范围改为 30 天
-- 自动过滤定时任务会话和心跳消息
-- 修复会话路径问题，使用 `stateDir` 配置
 
 ## 日记格式
 

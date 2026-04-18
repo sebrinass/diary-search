@@ -10,7 +10,7 @@
 
 import MiniSearch from 'minisearch';
 import { tokenize } from './tokenizer.js';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join, basename } from 'node:path';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -338,6 +338,36 @@ export class SessionSearchEngine {
     return content.slice(0, contextLength) + (content.length > contextLength ? '...' : '');
   }
 
+  cleanExportText(text) {
+    if (!text || !text.trim()) return '';
+
+    let cleaned = text;
+
+    cleaned = cleaned.replace(/<relevant-memories>[\s\S]*?<\/relevant-memories>/g, '');
+
+    cleaned = cleaned.replace(/Sender\s*\(\s*untrusted\s+metadata\s*\)\s*:\s*\n```json[\s\S]*?```/gi, '');
+
+    cleaned = cleaned.replace(/Conversation info\s*\(\s*untrusted\s+metadata\s*\)\s*:\s*\n```json[\s\S]*?```/gi, '');
+
+    cleaned = cleaned.replace(/<<<BEGIN_OPENCLAW_INTERNAL_CONTEXT>>>[\s\S]*?<<<END_OPENCLAW_INTERNAL_CONTEXT>>>/g, '');
+
+    cleaned = cleaned.replace(/\[UNTRUSTED DATA[\s\S]*?\[END UNTRUSTED DATA\]/g, '');
+
+    cleaned = cleaned.replace(/^\s*A new session was started[\s\S]*?(?=\n\S)/gm, '');
+
+    cleaned = cleaned.replace(/^Current time:.*$/gm, '');
+
+    cleaned = cleaned.replace(/^\s*\[message_id:[^\]]*\]\s*$/gm, '');
+
+    cleaned = cleaned.replace(/^\s*\[Queued user message[^\]]*\]\s*$/gm, '');
+
+    cleaned = cleaned.replace(/^HEARTBEAT_OK\s*$/gm, '');
+
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+
+    return cleaned.trim();
+  }
+
   exportSession(sessionId, options = {}) {
     const { includeThinking = false, includeToolCalls = false } = options;
     
@@ -401,12 +431,13 @@ export class SessionSearchEngine {
               
               const text = textParts.join('\n');
               
-              // 过滤心跳消息
-              if (msg.role === 'user' && text.startsWith('Read HEARTBEAT.md')) {
+              const cleanedText = this.cleanExportText(text);
+              
+              if (msg.role === 'user' && (cleanedText.startsWith('Read HEARTBEAT.md') || !cleanedText.trim())) {
                 continue;
               }
               
-              if (text.trim()) {
+              if (cleanedText.trim()) {
                 const timestamp = this.parseTimestamp(record.timestamp) || this.parseTimestamp(msg.timestamp);
                 const date = new Date(timestamp);
                 const timeStr = date.toLocaleString('zh-CN', {
@@ -422,7 +453,7 @@ export class SessionSearchEngine {
                 lines.push({
                   time: timeStr,
                   role: roleLabel,
-                  content: text
+                  content: cleanedText
                 });
               }
             }
@@ -452,6 +483,111 @@ export class SessionSearchEngine {
     }
     
     return output.join('\n');
+  }
+
+  sanitizeTitle(text, maxLength = 50) {
+    if (!text) return '未命名会话';
+    let cleaned = text.replace(/[\r\n]/g, ' ').trim();
+    cleaned = cleaned.replace(/[#:>\[\]|{}\\`]/g, '');
+    cleaned = cleaned.length > maxLength ? cleaned.slice(0, maxLength) : cleaned;
+    return cleaned || '未命名会话';
+  }
+
+  generateExportFilename(lines) {
+    if (!lines || lines.length === 0) return null;
+
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+
+    const firstLine = lines[0];
+    const title = this.sanitizeTitle(firstLine?.content, 20);
+
+    return `${dateStr}-${timeStr}-会话导出-${title}.md`;
+  }
+
+  generateExportMetadata(lines, sessionId, maxAgeDays = 3) {
+    const now = new Date();
+    const expires = new Date(now.getTime() + maxAgeDays * 24 * 60 * 60 * 1000);
+
+    const firstLine = lines && lines.length > 0 ? lines[0] : null;
+    const title = this.sanitizeTitle(firstLine?.content, 50);
+
+    return [
+      '---',
+      `type: session-export`,
+      `created: ${now.toISOString()}`,
+      `expires: ${expires.toISOString()}`,
+      `session-id: ${sessionId || 'unknown'}`,
+      `title: "${title}"`,
+      '---',
+      ''
+    ].join('\n');
+  }
+
+  formatSessionExportWithMetadata(lines, sessionId, maxAgeDays = 3) {
+    if (!lines || lines.length === 0) {
+      return '会话为空';
+    }
+
+    const metadata = this.generateExportMetadata(lines, sessionId, maxAgeDays);
+    const content = this.formatSessionExport(lines);
+    return metadata + content;
+  }
+
+  saveSessionExport(lines, exportDir, sessionId, maxAgeDays = 3) {
+    try {
+      if (!existsSync(exportDir)) {
+        mkdirSync(exportDir, { recursive: true });
+      }
+
+      const filename = this.generateExportFilename(lines);
+      if (!filename) return null;
+
+      const filepath = join(exportDir, filename);
+      const content = this.formatSessionExportWithMetadata(lines, sessionId, maxAgeDays);
+      writeFileSync(filepath, content, 'utf-8');
+
+      return filepath;
+    } catch (err) {
+      this.options.logger?.warn?.(`保存会话导出失败: ${err.message}`);
+      return null;
+    }
+  }
+
+  static cleanupExpiredExports(exportDir, logger = console, maxAgeDays = 3) {
+    if (!existsSync(exportDir)) return { deleted: 0, errors: 0 };
+
+    const files = readdirSync(exportDir);
+    const now = Date.now();
+    let deleted = 0;
+    let errors = 0;
+
+    for (const file of files) {
+      if (!file.endsWith('.md')) continue;
+
+      const filepath = join(exportDir, file);
+      try {
+        const stat = statSync(filepath);
+        const fileAgeMs = now - stat.mtimeMs;
+        const fileAgeDays = fileAgeMs / (24 * 60 * 60 * 1000);
+
+        if (fileAgeDays > maxAgeDays) {
+          unlinkSync(filepath);
+          deleted++;
+          logger.info?.(`已删除过期导出文件: ${file} (${Math.round(fileAgeDays)}天前创建)`);
+        }
+      } catch (err) {
+        errors++;
+        logger.warn?.(`清理导出文件失败: ${file}, ${err.message}`);
+      }
+    }
+
+    if (deleted > 0 || errors > 0) {
+      logger.info?.(`导出文件清理完成: 删除${deleted}个, 失败${errors}个`);
+    }
+
+    return { deleted, errors };
   }
 
   formatDate(timestamp) {

@@ -3,7 +3,7 @@
   "name": "Diary Search",
   "description": "基于 MiniSearch 的日记全文检索插件，支持中文分词和时间衰减排序",
   "kind": "extension",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
@@ -47,6 +47,11 @@
         "type": "string",
         "description": "同义词字典路径（相对于插件目录）",
         "default": "./synonyms.json"
+      },
+      "exportMaxAgeDays": {
+        "type": "number",
+        "description": "会话导出文件有效期（天），过期后自动清理",
+        "default": 3
       }
     }
   },
@@ -78,6 +83,10 @@
     },
     "synonymsPath": {
       "label": "同义词字典",
+      "advanced": true
+    },
+    "exportMaxAgeDays": {
+      "label": "导出文件有效期（天）",
       "advanced": true
     }
   }

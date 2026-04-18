@@ -96,7 +96,8 @@ const DEFAULT_CONFIG = {
   defaultLimit: 5,
   defaultSessionDays: 30,
   timeDecayFactor: 0.1,
-  synonymsPath: './synonyms.json'
+  synonymsPath: './synonyms.json',
+  exportMaxAgeDays: 3
 };
 
 /**
@@ -129,7 +130,7 @@ function loadSynonyms(synonymsPath) {
       return JSON.parse(content);
     }
   } catch (err) {
-    console.warn(`加载同义词字典失败: ${err.message}`);
+    // 同义词字典加载失败不影响核心功能
   }
   return {};
 }
@@ -717,21 +718,26 @@ const diarySearchPlugin = {
             });
             
             const lines = engine.exportSession(session_id, { includeThinking: include_thinking });
-            
+
             if (!lines || lines.length === 0) {
               return {
                 content: [{ type: 'text', text: `没有找到会话 ${session_id}，或会话为空。` }],
                 details: { sessionId: session_id }
               };
             }
-            
-            const markdown = engine.formatSessionExport(lines);
-            
+
+            const workspacePath = api.resolvePath(config.defaultWorkspace);
+            const exportDir = join(workspacePath, config.diarySubdir, 'exports');
+            const savedPath = engine.saveSessionExport(lines, exportDir, session_id, config.exportMaxAgeDays ?? 3);
+
+            const markdown = engine.formatSessionExportWithMetadata(lines, session_id, config.exportMaxAgeDays ?? 3);
+
             return {
               content: [{ type: 'text', text: markdown }],
               details: {
                 sessionId: session_id,
-                messageCount: lines.length
+                messageCount: lines.length,
+                savedPath: savedPath
               }
             };
           } catch (err) {
@@ -827,11 +833,36 @@ const diarySearchPlugin = {
     // 注册后台服务（用于清理缓存等）
     api.registerService({
       id: 'diary-search',
-      start() {
+      start(ctx) {
         api.logger.info('diary-search: 服务启动');
+
+        if (this._cleanupTimer) {
+          clearInterval(this._cleanupTimer);
+          this._cleanupTimer = null;
+        }
+
+        const workspacePath = api.resolvePath(config.defaultWorkspace);
+        const exportDir = join(workspacePath, config.diarySubdir, 'exports');
+        const maxAgeDays = config.exportMaxAgeDays ?? 3;
+
+        SessionSearchEngine.cleanupExpiredExports(exportDir, api.logger, maxAgeDays);
+
+        this._cleanupTimer = setInterval(() => {
+          try {
+            SessionSearchEngine.cleanupExpiredExports(exportDir, api.logger, maxAgeDays);
+          } catch (err) {
+            api.logger.warn?.(`diary-search: 清理导出文件异常: ${err.message}`);
+          }
+        }, 24 * 60 * 60 * 1000);
+
+        api.logger.info(`diary-search: 导出文件自动清理已启动，有效期${maxAgeDays}天`);
       },
       stop() {
-        // 清理缓存
+        if (this._cleanupTimer) {
+          clearInterval(this._cleanupTimer);
+          this._cleanupTimer = null;
+        }
+
         engineCache.clear();
         sessionEngineCache.clear();
         cronEngineCache.clear();
