@@ -18,8 +18,8 @@ metadata:
           access: "write"
           purpose: "保存会话导出文件（自动过期清理）"
         - path: "~/.openclaw/agents/*/sessions"
-          access: "read"
-          purpose: "读取会话记录（含归档文件）"
+          access: "read-write"
+          purpose: "读取会话记录（含归档文件）；清理 checkpoint 备份文件"
         - path: "~/.openclaw/cron"
           access: "read"
           purpose: "读取定时任务运行记录"
@@ -196,3 +196,22 @@ openclaw gateway restart
 ## 日记格式
 
 支持 `.md`、`.txt`、`.markdown` 文件，文件名建议使用 `YYYY-MM-DD.md` 格式。
+
+### 清理工具
+
+#### diary_cleanup
+
+扫描并清理会话目录中的 checkpoint 备份文件。checkpoint 是 OpenClaw 在会话出错/中断时自动创建的快照，内容与原会话完全重复，删除不影响正常对话记录。
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| agent | string | ❌ | Agent 名称，默认 xiaobu |
+| dry_run | boolean | ❌ | 仅扫描不删除（默认 true） |
+
+**使用流程**：
+
+1. 先调用 `diary_cleanup(dry_run=true)` 扫描，查看将删除的文件列表和大小
+2. **向用户确认后**，再调用 `diary_cleanup(dry_run=false)` 执行删除
+3. ⚠️ **删除前必须向用户确认！**
+
+**自动行为**：会话检索时已自动跳过 checkpoint 文件，无需手动排除。

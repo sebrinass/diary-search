@@ -5,8 +5,8 @@
  * 支持：BM25 检索、中文分词、时间衰减排序、同义词扩展、工作区隔离
  */
 
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
-import { join, dirname, normalize, resolve, basename } from 'node:path';
+import { existsSync, readFileSync, realpathSync, readdirSync, statSync, unlinkSync } from 'node:fs';
+import { join, dirname, normalize, resolve, basename, isAbsolute, relative as pathRelative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DiarySearchEngine } from './search.js';
 import { SessionSearchEngine } from './session.js';
@@ -24,21 +24,23 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  */
 function safeResolvePath(inputPath, basePath, logger) {
   try {
-    // 规范化路径，移除 ../ 和 ./ 等
+    if (isAbsolute(inputPath)) {
+      logger.warn?.(`拒绝绝对路径输入: ${inputPath}`);
+      return { valid: false, path: inputPath, error: '不允许使用绝对路径' };
+    }
+
     const normalizedBase = normalize(basePath);
     const resolvedPath = resolve(normalizedBase, inputPath);
     
-    // 检查路径是否存在
     if (!existsSync(resolvedPath)) {
       return { valid: false, path: resolvedPath, error: `路径不存在: ${resolvedPath}` };
     }
     
-    // 获取真实路径（解析符号链接）
     const realPath = realpathSync(resolvedPath);
     const realBase = realpathSync(normalizedBase);
     
-    // 验证解析后的路径仍在基础路径下
-    if (!realPath.startsWith(realBase)) {
+    const rel = pathRelative(realBase, realPath);
+    if (rel.startsWith('..') || isAbsolute(rel)) {
       logger.warn?.(`检测到路径遍历尝试: ${inputPath} -> ${realPath}`);
       return { valid: false, path: realPath, error: '路径不在允许的范围内' };
     }
@@ -828,6 +830,179 @@ const diarySearchPlugin = {
         }
       },
       { name: 'cron_list_runs' }
+    );
+
+    // 注册 diary_cleanup 工具
+    api.registerTool(
+      {
+        name: 'diary_cleanup',
+        label: 'Diary Cleanup',
+        description:
+          '扫描并清理会话目录中的 checkpoint 备份文件。' +
+          'checkpoint 文件是 OpenClaw 在会话出错/中断时自动创建的快照，内容与原会话完全重复。' +
+          '⚠️ 删除前必须向用户确认！先调用 dry_run=true 查看将删除的文件，用户确认后再执行删除。',
+        parameters: {
+          type: 'object',
+          properties: {
+            agent: {
+              type: 'string',
+              description: 'Agent 名称，默认 xiaobu'
+            },
+            dry_run: {
+              type: 'boolean',
+              description: '仅扫描不删除（默认 true）。设为 false 时才会实际删除文件，但必须先向用户确认！'
+            }
+          }
+        },
+
+        async execute(_toolCallId, params) {
+          const { agent = 'xiaobu', dry_run = true } = params;
+
+          const agentValidation = validateAgentName(agent);
+          if (!agentValidation.valid) {
+            return {
+              content: [{ type: 'text', text: `Agent 名称无效: ${agentValidation.error}` }],
+              details: { error: 'invalid_agent' }
+            };
+          }
+
+          if (!dry_run) {
+            try {
+              const stateDir = api.resolvePath(config.stateDir || config.defaultWorkspace);
+              const sessionDir = join(stateDir, 'agents', agent, 'sessions');
+
+              if (!existsSync(sessionDir)) {
+                return {
+                  content: [{ type: 'text', text: `会话目录不存在: ${sessionDir}` }],
+                  details: { error: 'dir_not_found' }
+                };
+              }
+
+              const files = readdirSync(sessionDir);
+              let deleted = 0;
+              let freedBytes = 0;
+              const errors = [];
+
+              for (const file of files) {
+                if (!file.includes('.checkpoint.') || !file.endsWith('.jsonl')) continue;
+                const filepath = join(sessionDir, file);
+                try {
+                  const stat = statSync(filepath);
+                  unlinkSync(filepath);
+                  deleted++;
+                  freedBytes += stat.size;
+                } catch (err) {
+                  errors.push({ file, error: err.message });
+                }
+              }
+
+              const freedMB = (freedBytes / 1024 / 1024).toFixed(2);
+              const msg = errors.length === 0
+                ? `✅ 已清理 ${deleted} 个 checkpoint 文件，释放 ${freedMB}MB 空间。`
+                : `✅ 已清理 ${deleted} 个 checkpoint 文件，释放 ${freedMB}MB 空间。${errors.length} 个文件删除失败。`;
+
+              sessionEngineCache.delete(sessionDir);
+
+              return {
+                content: [{ type: 'text', text: msg }],
+                details: { agent, deleted, freedMB, errors }
+              };
+            } catch (err) {
+              return {
+                content: [{ type: 'text', text: `清理失败: ${err.message}` }],
+                details: { error: err.message }
+              };
+            }
+          }
+
+          try {
+            const stateDir = api.resolvePath(config.stateDir || config.defaultWorkspace);
+            const sessionDir = join(stateDir, 'agents', agent, 'sessions');
+
+            if (!existsSync(sessionDir)) {
+              return {
+                content: [{ type: 'text', text: `会话目录不存在: ${sessionDir}` }],
+                details: { error: 'dir_not_found' }
+              };
+            }
+
+            const files = readdirSync(sessionDir);
+            const checkpoints = [];
+
+            for (const file of files) {
+              if (!file.includes('.checkpoint.')) continue;
+              if (!file.endsWith('.jsonl')) continue;
+
+              const filepath = join(sessionDir, file);
+              try {
+                const stat = statSync(filepath);
+                checkpoints.push({
+                  filename: file,
+                  size: stat.size,
+                  sizeMB: (stat.size / 1024 / 1024).toFixed(2),
+                  modified: stat.mtime.toISOString().split('T')[0]
+                });
+              } catch (err) {
+                checkpoints.push({
+                  filename: file,
+                  size: 0,
+                  sizeMB: '0.00',
+                  modified: 'unknown',
+                  error: err.message
+                });
+              }
+            }
+
+            if (checkpoints.length === 0) {
+              return {
+                content: [{ type: 'text', text: `✅ ${agent} 的会话目录中没有 checkpoint 文件，无需清理。` }],
+                details: { agent, checkpointCount: 0 }
+              };
+            }
+
+            const totalSize = checkpoints.reduce((sum, c) => sum + c.size, 0);
+            const totalSizeMB = (totalSize / 1024 / 1024).toFixed(2);
+
+            const lines = [
+              `## Checkpoint 扫描结果 (${agent})`,
+              '',
+              `发现 **${checkpoints.length}** 个 checkpoint 文件，共 **${totalSizeMB}MB**`,
+              '',
+              '| 文件名 | 大小 | 修改日期 |',
+              '|--------|------|----------|'
+            ];
+
+            for (const cp of checkpoints) {
+              const shortName = cp.filename.length > 50
+                ? cp.filename.slice(0, 20) + '...' + cp.filename.slice(-25)
+                : cp.filename;
+              lines.push(`| ${shortName} | ${cp.sizeMB}MB | ${cp.modified} |`);
+            }
+
+            lines.push('');
+            lines.push(`💡 如需清理，请确认后调用：\`diary_cleanup(agent="${agent}", dry_run=false)\``);
+            lines.push('');
+            lines.push('> ⚠️ checkpoint 是会话快照备份，内容与原会话完全重复。删除后不影响正常对话记录。');
+
+            return {
+              content: [{ type: 'text', text: lines.join('\n') }],
+              details: {
+                agent,
+                checkpointCount: checkpoints.length,
+                totalSizeMB,
+                checkpoints
+              }
+            };
+          } catch (err) {
+            api.logger.error(`diary-cleanup: 扫描失败: ${err.message}`);
+            return {
+              content: [{ type: 'text', text: `扫描失败: ${err.message}` }],
+              details: { error: err.message }
+            };
+          }
+        }
+      },
+      { name: 'diary_cleanup' }
     );
 
     // 注册后台服务（用于清理缓存等）

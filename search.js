@@ -76,7 +76,7 @@ export class DiarySearchEngine {
    */
   parseDateFromFilename(filename) {
     // 匹配 YYYY-MM-DD 格式
-    const match = filename.match(/(\d{4})-(\d{2})-(\d{2})/);
+    const match = basename(filename).match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (match) {
       const [, year, month, day] = match;
       return new Date(parseInt(year), parseInt(month) - 1, parseInt(day)).getTime();
@@ -336,11 +336,16 @@ export class DiarySearchEngine {
     // 扩展查询词
     const expandedQuery = this.expandQuery(query);
     
-    // 执行 MiniSearch 搜索
-    const rawResults = this.miniSearch.search(expandedQuery, {
-      prefix: true,
-      fuzzy: 0.2
-    });
+    let rawResults;
+    try {
+      rawResults = this.miniSearch.search(expandedQuery, {
+        prefix: true,
+        fuzzy: 0.2
+      });
+    } catch (err) {
+      this.options.logger?.warn?.(`MiniSearch 搜索异常: ${err.message}, query="${expandedQuery}"`);
+      return [];
+    }
 
     // 解析时间过滤器
     const timeRange = this.parseTimeFilter(timeFilter);

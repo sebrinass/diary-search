@@ -1,5 +1,7 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, basename } from 'node:path';
+
+const MAX_CRON_FILE_SIZE = 10 * 1024 * 1024;
 
 export class CronSearchEngine {
   constructor(cronDir, options = {}) {
@@ -51,7 +53,12 @@ export class CronSearchEngine {
         if (!file.endsWith('.jsonl')) continue;
         
         const filepath = join(this.runsDir, file);
-        const content = readFileSync(filepath, 'utf-8');
+          const stat = statSync(filepath);
+          if (stat.size > MAX_CRON_FILE_SIZE) {
+            this.options.logger?.warn?.(`跳过超大文件: ${file} (${(stat.size / 1024 / 1024).toFixed(1)}MB > 10MB)`);
+            continue;
+          }
+          const content = readFileSync(filepath, 'utf-8');
         const lines = content.trim().split('\n');
         
         for (const line of lines) {

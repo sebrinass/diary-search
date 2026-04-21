@@ -73,7 +73,7 @@ export class SessionSearchEngine {
               timestamp: this.parseTimestamp(record.timestamp),
               cwd: record.cwd
             };
-          } else if (record.type === 'message' && record.message) {
+          } else if (record.type === 'message' && record.message && typeof record.message === 'object') {
             const msg = record.message;
             if (msg.role === 'user' || msg.role === 'assistant') {
               const textContent = this.extractTextContent(msg.content);
@@ -119,8 +119,7 @@ export class SessionSearchEngine {
     for (const file of files) {
       // 支持 .jsonl 和 .deleted.xxx.jsonl（归档文件）
       if (!file.endsWith('.jsonl')) continue;
-      // 排除备份和重置文件，但保留归档文件（.deleted.xxx）
-      if (file.includes('.bak-') || file.includes('.reset.')) continue;
+      if (file.includes('.bak-') || file.includes('.reset.') || file.includes('.checkpoint.')) continue;
 
       const filepath = join(sessionDir, file);
       
@@ -341,6 +340,10 @@ export class SessionSearchEngine {
   cleanExportText(text) {
     if (!text || !text.trim()) return '';
 
+    if (text.length > 1048576) {
+      text = text.slice(0, 1048576);
+    }
+
     let cleaned = text;
 
     cleaned = cleaned.replace(/<relevant-memories>[\s\S]*?<\/relevant-memories>/g, '');
@@ -412,7 +415,7 @@ export class SessionSearchEngine {
         try {
           const record = JSON.parse(line);
           
-          if (record.type === 'message' && record.message) {
+          if (record.type === 'message' && record.message && typeof record.message === 'object') {
             const msg = record.message;
             if (msg.role === 'user' || msg.role === 'assistant') {
               // 提取文本内容
