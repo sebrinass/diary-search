@@ -132,8 +132,6 @@ const sessionEngineCache = new Map();
  */
 const cronEngineCache = new Map();
 
-let effectiveWorkspace = null;
-
 /**
  * 加载同义词字典
  * @param {string} synonymsPath - 同义词文件路径
@@ -253,85 +251,64 @@ const diarySearchPlugin = {
       return;
     }
 
-    const resolvedBasePath = api.resolvePath(config.defaultWorkspace);
-    effectiveWorkspace = resolvedBasePath;
-    const memoryDir = join(resolvedBasePath, config.diarySubdir);
-    if (!existsSync(memoryDir) || !readdirSync(memoryDir).some(f => /\.(md|txt|markdown)$/.test(f))) {
-      try {
-        for (const entry of readdirSync(resolvedBasePath)) {
-          if (entry.startsWith('workspace-')) {
-            const wsMemoryDir = join(resolvedBasePath, entry, config.diarySubdir);
-            if (existsSync(wsMemoryDir) && readdirSync(wsMemoryDir).some(f => /\.(md|txt|markdown)$/.test(f))) {
-              effectiveWorkspace = join(resolvedBasePath, entry);
-              api.logger.info(`diary-search: 自动检测到工作区目录: ${effectiveWorkspace}`);
-              break;
-            }
-          }
-        }
-      } catch (_) {}
-    }
+    const fallbackWorkspace = api.resolvePath(config.defaultWorkspace);
 
     // 注册 diary_search 工具
     api.registerTool(
-      {
-        name: 'diary_search',
-        label: 'Diary Search',
-        description: 
-          '搜索日记内容。支持中文分词、时间过滤和工作区隔离。' +
-          '使用 BM25 算法进行相关性排序，并应用时间衰减（近期日记优先）。',
-        parameters: {
-          type: 'object',
-          properties: {
-            query: {
-              type: 'string',
-              description: '搜索关键词，支持中英文混合'
+      (ctx) => {
+        const wsDir = ctx.workspaceDir || fallbackWorkspace;
+        return {
+          name: 'diary_search',
+          label: 'Diary Search',
+          description: 
+            '搜索日记内容。支持中文分词、时间过滤和工作区隔离。' +
+            '使用 BM25 算法进行相关性排序，并应用时间衰减（近期日记优先）。',
+          parameters: {
+            type: 'object',
+            properties: {
+              query: {
+                type: 'string',
+                description: '搜索关键词，支持中英文混合'
+              },
+              limit: {
+                type: 'number',
+                description: `返回条数，默认 ${config.defaultLimit}`
+              },
+              time_filter: {
+                type: 'string',
+                description: 
+                  '时间过滤器。可选值: today, yesterday, last_week, last_month, this_month, ' +
+                  '或具体日期格式 YYYY-MM, YYYY-MM-DD'
+              },
+              workspace: {
+                type: 'string',
+                description: 
+                  '工作区路径（可选）。用于多 agent 隔离，不同工作区有独立的日记目录。' +
+                  '默认使用当前 agent 的工作区目录'
+              }
             },
-            limit: {
-              type: 'number',
-              description: `返回条数，默认 ${config.defaultLimit}`
-            },
-            time_filter: {
-              type: 'string',
-              description: 
-                '时间过滤器。可选值: today, yesterday, last_week, last_month, this_month, ' +
-                '或具体日期格式 YYYY-MM, YYYY-MM-DD'
-            },
-            workspace: {
-              type: 'string',
-              description: 
-                '工作区路径（可选）。用于多 agent 隔离，不同工作区有独立的日记目录。' +
-                `默认使用配置的工作区: ${effectiveWorkspace}`
-            }
+            required: ['query']
           },
-          required: ['query']
-        },
-        
-        /**
-         * 执行搜索
-         * @param {string} _toolCallId - 工具调用 ID
-         * @param {Object} params - 参数
-         * @returns {Object} 搜索结果
-         */
-        async execute(_toolCallId, params) {
-          const { 
-            query, 
-            limit = config.defaultLimit, 
-            time_filter = null,
-            workspace = null 
-          } = params;
           
-          if (!query || query.trim().length === 0) {
-            return {
-              content: [{ type: 'text', text: '请提供搜索关键词。' }],
-              details: { error: 'empty_query' }
-            };
-          }
+          async execute(_toolCallId, params) {
+            const { 
+              query, 
+              limit = config.defaultLimit, 
+              time_filter = null,
+              workspace = null 
+            } = params;
+            
+            if (!query || query.trim().length === 0) {
+              return {
+                content: [{ type: 'text', text: '请提供搜索关键词。' }],
+                details: { error: 'empty_query' }
+              };
+            }
 
-          // 验证 limit 参数
-          const safeLimit = Math.max(1, Math.min(100, Number(limit) || config.defaultLimit));
+            const safeLimit = Math.max(1, Math.min(100, Number(limit) || config.defaultLimit));
 
-          try {
-            const basePath = effectiveWorkspace;
+            try {
+              const basePath = wsDir;
             
             // 安全地解析工作区路径
             let workspacePath;
@@ -392,31 +369,34 @@ const diarySearchPlugin = {
             };
           }
         }
+      };
       },
       { name: 'diary_search' }
     );
 
     // 注册 diary_stats 工具（辅助工具）
     api.registerTool(
-      {
-        name: 'diary_stats',
-        label: 'Diary Statistics',
-        description: '获取日记统计信息，包括文档数量、最早和最新日记日期。',
-        parameters: {
-          type: 'object',
-          properties: {
-            workspace: {
-              type: 'string',
-              description: '工作区路径（可选）'
+      (ctx) => {
+        const wsDir = ctx.workspaceDir || fallbackWorkspace;
+        return {
+          name: 'diary_stats',
+          label: 'Diary Statistics',
+          description: '获取日记统计信息，包括文档数量、最早和最新日记日期。',
+          parameters: {
+            type: 'object',
+            properties: {
+              workspace: {
+                type: 'string',
+                description: '工作区路径（可选）'
+              }
             }
-          }
-        },
-        
-        async execute(_toolCallId, params) {
-          const { workspace = null } = params;
+          },
           
-          try {
-            const basePath = effectiveWorkspace;
+          async execute(_toolCallId, params) {
+            const { workspace = null } = params;
+            
+            try {
+              const basePath = wsDir;
             
             // 安全地解析工作区路径
             let workspacePath;
@@ -470,7 +450,8 @@ const diarySearchPlugin = {
               details: { error: err.message }
             };
           }
-        }
+          }
+        };
       },
       { name: 'diary_stats' }
     );
@@ -687,13 +668,15 @@ const diarySearchPlugin = {
 
     // 注册 session_export 工具
     api.registerTool(
-      {
-        name: 'session_export',
-        label: 'Session Export',
-        description: 
-          '导出会话的纯对话文本。过滤掉工具调用和思考过程，只保留用户和助手的对话内容。' +
-          '适用于查看完整对话记录，方便写日记或回顾。',
-        parameters: {
+      (ctx) => {
+        const wsDir = ctx.workspaceDir || fallbackWorkspace;
+        return {
+          name: 'session_export',
+          label: 'Session Export',
+          description: 
+            '导出会话的纯对话文本。过滤掉工具调用和思考过程，只保留用户和助手的对话内容。' +
+            '适用于查看完整对话记录，方便写日记或回顾。',
+          parameters: {
           type: 'object',
           properties: {
             session_id: {
@@ -758,7 +741,7 @@ const diarySearchPlugin = {
               };
             }
 
-            const workspacePath = effectiveWorkspace;
+            const workspacePath = wsDir;
             const exportDir = join(workspacePath, config.diarySubdir, 'exports');
             const savedPath = engine.saveSessionExport(lines, exportDir, session_id, config.exportMaxAgeDays ?? 3);
 
@@ -779,7 +762,8 @@ const diarySearchPlugin = {
               details: { error: err.message }
             };
           }
-        }
+          }
+        };
       },
       { name: 'session_export' }
     );
@@ -1050,7 +1034,7 @@ const diarySearchPlugin = {
         const pluginConfig = api.pluginConfig || {};
         const safeConfig = { ...DEFAULT_CONFIG, ...pluginConfig };
         
-        const workspacePath = effectiveWorkspace || api.resolvePath(expandTilde(safeConfig.defaultWorkspace));
+        const workspacePath = ctx.workspaceDir || api.resolvePath(expandTilde(safeConfig.defaultWorkspace));
         api.logger.info(`diary-search: workspace=${workspacePath}`);
         
         if (!workspacePath) {
