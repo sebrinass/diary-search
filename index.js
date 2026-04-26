@@ -16,6 +16,18 @@ import { CronSearchEngine } from './cron.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
+ * 展开路径中的 ~ 符号为用户主目录
+ * @param {string} inputPath - 可能包含 ~ 的路径
+ * @returns {string} 展开后的路径
+ */
+function expandTilde(inputPath) {
+  if (typeof inputPath === 'string' && inputPath.startsWith('~')) {
+    return inputPath.replace('~', process.env.HOME || process.env.USERPROFILE || '');
+  }
+  return inputPath;
+}
+
+/**
  * 安全地解析和验证路径，防止路径遍历攻击
  * @param {string} inputPath - 用户输入的路径
  * @param {string} basePath - 基础路径（用于相对路径解析）
@@ -1016,7 +1028,7 @@ const diarySearchPlugin = {
           this._cleanupTimer = null;
         }
 
-        const workspacePath = api.resolvePath(config.defaultWorkspace);
+        const workspacePath = api.resolvePath(expandTilde(config.defaultWorkspace));
         const exportDir = join(workspacePath, config.diarySubdir, 'exports');
         const maxAgeDays = config.exportMaxAgeDays ?? 3;
 
