@@ -1028,9 +1028,11 @@ const diarySearchPlugin = {
           this._cleanupTimer = null;
         }
 
-        const workspacePath = api.resolvePath(expandTilde(config.defaultWorkspace));
-        const exportDir = join(workspacePath, config.diarySubdir, 'exports');
-        const maxAgeDays = config.exportMaxAgeDays ?? 3;
+        // 使用默认配置作为后备，确保配置项始终有值
+        const safeConfig = { ...DEFAULT_CONFIG, ...config };
+        const workspacePath = api.resolvePath(expandTilde(safeConfig.defaultWorkspace));
+        const exportDir = join(workspacePath, safeConfig.diarySubdir, 'exports');
+        const maxAgeDays = safeConfig.exportMaxAgeDays ?? 3;
 
         SessionSearchEngine.cleanupExpiredExports(exportDir, api.logger, maxAgeDays);
 
