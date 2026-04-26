@@ -1029,7 +1029,9 @@ const diarySearchPlugin = {
         }
 
         // 使用默认配置作为后备，确保配置项始终有值
-        const safeConfig = { ...DEFAULT_CONFIG, ...config };
+        // 注意：config 可能为 undefined，需要防御性处理
+        const safeConfig = { ...DEFAULT_CONFIG, ...(config || {}) };
+        api.logger.info(`diary-search: workspace=${safeConfig.defaultWorkspace}`);
         const workspacePath = api.resolvePath(expandTilde(safeConfig.defaultWorkspace));
         const exportDir = join(workspacePath, safeConfig.diarySubdir, 'exports');
         const maxAgeDays = safeConfig.exportMaxAgeDays ?? 3;
