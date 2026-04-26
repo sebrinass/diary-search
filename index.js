@@ -132,6 +132,8 @@ const sessionEngineCache = new Map();
  */
 const cronEngineCache = new Map();
 
+let effectiveWorkspace = null;
+
 /**
  * 加载同义词字典
  * @param {string} synonymsPath - 同义词文件路径
@@ -251,6 +253,24 @@ const diarySearchPlugin = {
       return;
     }
 
+    const resolvedBasePath = api.resolvePath(config.defaultWorkspace);
+    effectiveWorkspace = resolvedBasePath;
+    const memoryDir = join(resolvedBasePath, config.diarySubdir);
+    if (!existsSync(memoryDir) || !readdirSync(memoryDir).some(f => /\.(md|txt|markdown)$/.test(f))) {
+      try {
+        for (const entry of readdirSync(resolvedBasePath)) {
+          if (entry.startsWith('workspace-')) {
+            const wsMemoryDir = join(resolvedBasePath, entry, config.diarySubdir);
+            if (existsSync(wsMemoryDir) && readdirSync(wsMemoryDir).some(f => /\.(md|txt|markdown)$/.test(f))) {
+              effectiveWorkspace = join(resolvedBasePath, entry);
+              api.logger.info(`diary-search: 自动检测到工作区目录: ${effectiveWorkspace}`);
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
     // 注册 diary_search 工具
     api.registerTool(
       {
@@ -280,7 +300,7 @@ const diarySearchPlugin = {
               type: 'string',
               description: 
                 '工作区路径（可选）。用于多 agent 隔离，不同工作区有独立的日记目录。' +
-                `默认使用配置的工作区: ${config.defaultWorkspace}`
+                `默认使用配置的工作区: ${effectiveWorkspace}`
             }
           },
           required: ['query']
@@ -311,8 +331,7 @@ const diarySearchPlugin = {
           const safeLimit = Math.max(1, Math.min(100, Number(limit) || config.defaultLimit));
 
           try {
-            // 确定基础路径（使用默认工作区作为基础）
-            const basePath = api.resolvePath(config.defaultWorkspace);
+            const basePath = effectiveWorkspace;
             
             // 安全地解析工作区路径
             let workspacePath;
@@ -397,8 +416,7 @@ const diarySearchPlugin = {
           const { workspace = null } = params;
           
           try {
-            // 确定基础路径
-            const basePath = api.resolvePath(config.defaultWorkspace);
+            const basePath = effectiveWorkspace;
             
             // 安全地解析工作区路径
             let workspacePath;
@@ -740,7 +758,7 @@ const diarySearchPlugin = {
               };
             }
 
-            const workspacePath = api.resolvePath(config.defaultWorkspace);
+            const workspacePath = effectiveWorkspace;
             const exportDir = join(workspacePath, config.diarySubdir, 'exports');
             const savedPath = engine.saveSessionExport(lines, exportDir, session_id, config.exportMaxAgeDays ?? 3);
 
@@ -1028,12 +1046,19 @@ const diarySearchPlugin = {
           this._cleanupTimer = null;
         }
 
-        // 使用默认配置作为后备，确保配置项始终有值
-        // 注意：config 可能为 undefined，需要防御性处理
-        const safeConfig = { ...DEFAULT_CONFIG, ...(config || {}) };
-        api.logger.info(`diary-search: workspace=${safeConfig.defaultWorkspace}`);
-        const workspacePath = api.resolvePath(expandTilde(safeConfig.defaultWorkspace));
-        const exportDir = join(workspacePath, safeConfig.diarySubdir, 'exports');
+        // 直接从 api.pluginConfig 获取配置，避免闭包问题
+        const pluginConfig = api.pluginConfig || {};
+        const safeConfig = { ...DEFAULT_CONFIG, ...pluginConfig };
+        
+        const workspacePath = effectiveWorkspace || api.resolvePath(expandTilde(safeConfig.defaultWorkspace));
+        api.logger.info(`diary-search: workspace=${workspacePath}`);
+        
+        if (!workspacePath) {
+          api.logger.warn('diary-search: 无法解析工作区路径，跳过服务启动');
+          return;
+        }
+        
+        const exportDir = join(workspacePath, safeConfig.diarySubdir || 'memory', 'exports');
         const maxAgeDays = safeConfig.exportMaxAgeDays ?? 3;
 
         SessionSearchEngine.cleanupExpiredExports(exportDir, api.logger, maxAgeDays);
